@@ -1369,17 +1369,12 @@
                 }
 
                 if (filteredData.length < 10) {
-                    alert(`Warning: Only ${filteredData.length} rows after filtering. Clustering may not be meaningful with so few rows. Consider selecting more filter values.`);
+                    console.warn(`Only ${filteredData.length} rows after filtering. Clustering may not be meaningful.`);
                 }
 
-                // Auto-adjust settings for smaller datasets
+                // Use user's settings directly (no auto-adjustment override)
                 const adjustedSettings = { ...analysisSettings };
-                if (filteredData.length < 50) {
-                    // For small datasets, reduce requirements
-                    adjustedSettings.topWords = Math.min(30, analysisSettings.topWords);
-                    adjustedSettings.minCoOccurrence = Math.max(2, Math.floor(filteredData.length / 20));
-                    console.log(`Auto-adjusted settings for ${filteredData.length} rows:`, adjustedSettings);
-                }
+                console.log(`Using settings for ${filteredData.length} rows:`, adjustedSettings);
 
                 // Extract and process words from filtered data
                 const wordFreq = new Map();
@@ -1456,11 +1451,13 @@
 
                 console.log(`Detected ${clusters.length} clusters:`, clusters.map(c => `${c.name}(${c.nodeCount})`).join(', '));
 
-                if (clusters.length === 1) {
-                    console.warn('Only 1 cluster detected. Suggestions:');
-                    console.warn('- Increase Cluster Sensitivity to 1.5-2.0 in Settings');
-                    console.warn('- Reduce Top Keywords to 30-40');
-                    console.warn('- Increase Minimum Co-occurrence to 4-5');
+                if (clusters.length === 1 && nodes.length > 10) {
+                    console.warn(`⚠️ Only 1 cluster detected from ${nodes.length} nodes.`);
+                    console.warn('💡 Try these settings (⚙️ Settings button):');
+                    console.warn('   • Cluster Sensitivity: Increase to 1.6-2.0');
+                    console.warn('   • Top Keywords: Reduce to 30-40');
+                    console.warn('   • Minimum Co-occurrence: Increase to 4-6');
+                    console.warn(`   Current: topWords=${adjustedSettings.topWords}, minCoOccur=${adjustedSettings.minCoOccurrence}, resolution=${analysisSettings.resolution}`);
                 }
 
                 // Update stats
@@ -1514,17 +1511,13 @@
 
                 console.log(`Graph created: ${graph.order} nodes, ${graph.size} edges`);
 
-                // Auto-adjust resolution for small graphs
-                let resolution = analysisSettings.resolution;
-                if (graph.order < 30) {
-                    resolution = Math.max(1.5, analysisSettings.resolution);
-                    console.log(`Auto-adjusted resolution to ${resolution} for small graph`);
-                }
-
+                // Use user's resolution setting directly
                 const communities = louvain(graph, {
                     getEdgeWeight: 'weight',
-                    resolution: resolution
+                    resolution: analysisSettings.resolution
                 });
+                
+                console.log(`Using cluster resolution: ${analysisSettings.resolution}`);
 
                 console.log('Community detection complete');
                 return communities;
