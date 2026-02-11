@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Topic Network Explorer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/graphology@0.25.4/dist/graphology.umd.js"></script>
+    <script src="https://unpkg.com/graphology-communities-louvain@2.0.1/index.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            color: white;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+
+        .upload-zone {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .drop-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .drop-area:hover, .drop-area.drag-over {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        .drop-area input[type="file"] {
+            display: none;
+        }
+
+        .drop-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 8px;
+        }
+
+        .modal-header p {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .column-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .column-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .column-item:hover {
+            background: #f0f4ff;
+        }
+
+        .column-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .column-item label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-btn.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .modal-btn.primary:hover {
+            opacity: 0.9;
+        }
+
+        .modal-btn.secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .modal-btn.secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .viz-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            display: none;
+        }
+
+        .viz-container.active {
+            display: block;
+        }
+
+        .main-content {
+            display: flex;
+            gap: 20px;
+        }
+
+        .cluster-panel {
+            width: 280px;
+            flex-shrink: 0;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            max-height: calc(100vh - 400px);
+            overflow-y: auto;
+        }
+
+        .cluster-panel h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .cluster-item {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .cluster-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .cluster-item.active {
+            border-color: #667eea;
+        }
+
+        .cluster-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .cluster-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .cluster-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .cluster-count {
+            font-size: 11px;
+            color: #666;
+            margin-left: auto;
+        }
+
+        .cluster-keywords {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .viz-area {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .view-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: #e0e0e0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        #networkContainer {
+            width: 100%;
+            height: calc(100vh - 450px);
+            min-height: 600px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fafafa;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #network {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .stat-box {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            opacity: 0.9;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .node circle {
+            cursor: pointer;
+            stroke: white;
+            stroke-width: 2px;
+        }
+
+        .node text {
+            font-size: 11px;
+            font-weight: 600;
+            fill: #333;
+            text-shadow: 
+                -1px -1px 0 white,
+                1px -1px 0 white,
+                -1px 1px 0 white,
+                1px 1px 0 white;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.3;
+        }
+
+        .hull {
+            fill-opacity: 0.15;
+            stroke-opacity: 0.4;
+            stroke-width: 30px;
+            stroke-linejoin: round;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .help-text {
+            background: #f0f4ff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .selected-columns {
+            background: #f0f4ff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .selected-columns strong {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 Topic Network Explorer</h1>
+            <p class="subtitle">Discover patterns and topic clusters in any text data</p>
+        </div>
+
+        <div class="upload-zone">
+            <div class="drop-area" id="dropArea">
+                <div class="drop-icon">📂</div>
+                <h2>Drop CSV file here or click to browse</h2>
+                <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                    Upload any CSV with text columns to analyze
+                </p>
+                <input type="file" id="fileInput" accept=".csv">
+            </div>
+        </div>
+
+        <div class="viz-container" id="vizContainer">
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="rowCount">0</div>
+                    <div class="stat-label">Rows</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="wordCount">0</div>
+                    <div class="stat-label">Keywords</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="edgeCount">0</div>
+                    <div class="stat-label">Connections</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="clusterCount">0</div>
+                    <div class="stat-label">Clusters</div>
+                </div>
+            </div>
+
+            <div class="selected-columns" id="selectedColumnsInfo"></div>
+            
+            <div class="help-text">
+                💡 <strong>Tip:</strong> Clusters show related topics | Click cluster in panel to highlight | Drag nodes to rearrange
+            </div>
+
+            <div class="main-content">
+                <div class="cluster-panel" id="clusterPanel">
+                    <h3>📊 Topic Clusters</h3>
+                    <div id="clusterList"></div>
+                </div>
+
+                <div class="viz-area">
+                    <div class="view-tabs">
+                        <button class="tab-btn active" data-view="network">Network View</button>
+                        <button class="tab-btn" data-view="community">Community View</button>
+                    </div>
+
+                    <div class="controls">
+                        <button class="btn" id="btnReset">Reset View</button>
+                        <button class="btn" id="btnZoomIn">Zoom In</button>
+                        <button class="btn" id="btnZoomOut">Zoom Out</button>
+                        <button class="btn" id="btnChangeColumns">Change Columns</button>
+                        <button class="btn" id="btnStopWords">Stop Words</button>
+                        <button class="btn" id="btnSettings">⚙️ Settings</button>
+                    </div>
+
+                    <div id="networkContainer">
+                        <svg id="network"></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div>Processing data...</div>
+        </div>
+    </div>
+
+    <!-- Column Selection Modal -->
+    <div class="modal" id="columnModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Select Columns to Analyze</h2>
+                <p>Choose 1-3 text columns from your CSV</p>
+            </div>
+            <div class="column-list" id="columnList"></div>
+            <div class="modal-actions">
+                <button class="modal-btn secondary" id="btnCancelColumns">Cancel</button>
+                <button class="modal-btn primary" id="btnAnalyzeColumns">Analyze</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>Analysis Settings</h2>
+                <p>Tune these parameters to get better clusters</p>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                    Top Keywords to Analyze: <span id="topWordsValue">50</span>
+                </label>
+                <input type="range" id="topWordsSlider" min="30" max="150" value="50" 
+                    style="width: 100%; cursor: pointer;">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Fewer keywords = More distinct clusters | More keywords = Broader analysis
+                </p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                    Minimum Co-occurrence: <span id="minCoOccurValue">3</span>
+                </label>
+                <input type="range" id="minCoOccurSlider" min="2" max="10" value="3" 
+                    style="width: 100%; cursor: pointer;">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Higher = Stronger connections required | Lower = More connections shown
+                </p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                    Cluster Sensitivity: <span id="resolutionValue">1.2</span>
+                </label>
+                <input type="range" id="resolutionSlider" min="0.5" max="2.0" step="0.1" value="1.2" 
+                    style="width: 100%; cursor: pointer;">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Higher = More smaller clusters | Lower = Fewer larger clusters
+                </p>
+            </div>
+
+            <div style="background: #f0f4ff; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                <p style="font-size: 13px; color: #555; margin: 0;">
+                    <strong>💡 Tip:</strong> If you're getting only 1 cluster, try:<br>
+                    • Increase "Cluster Sensitivity" to 1.5+<br>
+                    • Reduce "Top Keywords" to 40-50<br>
+                    • Increase "Minimum Co-occurrence" to 4-5
+                </p>
+            </div>
+
+            <div class="modal-actions">
+                <button class="modal-btn secondary" id="btnResetSettings">Reset Defaults</button>
+                <button class="modal-btn secondary" id="btnCancelSettings">Cancel</button>
+                <button class="modal-btn primary" id="btnApplySettings">Apply & Re-analyze</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stop Words Modal -->
+    <div class="modal" id="stopWordsModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>Manage Stop Words</h2>
+                <p>Common words to ignore during analysis</p>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; color: #333;">Add Stop Word:</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="newStopWord" placeholder="Enter word to ignore..." 
+                        style="flex: 1; padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                    <button class="modal-btn primary" id="btnAddStopWord" style="padding: 8px 16px;">Add</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <label style="font-weight: 600; font-size: 14px; color: #333;">Current Stop Words (click to remove):</label>
+                    <button class="modal-btn secondary" id="btnResetStopWords" style="padding: 4px 12px; font-size: 12px;">Reset to Defaults</button>
+                </div>
+                <div id="stopWordsList" style="max-height: 300px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="modal-btn secondary" id="btnCancelStopWords">Close</button>
+                <button class="modal-btn primary" id="btnSaveStopWords">Save & Re-analyze</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <style>
+        .stop-word-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: white;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid #e0e0e0;
+        }
+
+        .stop-word-tag:hover {
+            background: #ffe0e0;
+            border-color: #ff6b6b;
+        }
+
+        .stop-word-tag .remove-icon {
+            color: #999;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .stop-word-tag:hover .remove-icon {
+            color: #ff6b6b;
+        }
+    </style>
+
+    <script>
+        const DEFAULT_STOP_WORDS = [
+            'the', 'is', 'at', 'which', 'on', 'a', 'an', 'as', 'are', 'was', 'were',
+            'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+            'would', 'should', 'could', 'can', 'may', 'might', 'must', 'shall',
+            'to', 'from', 'in', 'out', 'of', 'for', 'with', 'by', 'about', 'into',
+            'through', 'during', 'before', 'after', 'above', 'below', 'between',
+            'and', 'or', 'but', 'if', 'then', 'so', 'than', 'such', 'no', 'not',
+            'only', 'own', 'same', 'too', 'very', 'just', 'that', 'this', 'these',
+            'those', 'what', 'when', 'where', 'who', 'why', 'how', 'all', 'each',
+            'every', 'both', 'few', 'more', 'most', 'other', 'some', 'any'
+        ];
+
+        // Load stop words from localStorage or use defaults
+        function loadStopWords() {
+            const saved = localStorage.getItem('customStopWords');
+            return saved ? JSON.parse(saved) : [...DEFAULT_STOP_WORDS];
+        }
+
+        function saveStopWords(words) {
+            localStorage.setItem('customStopWords', JSON.stringify(words));
+        }
+
+        let STOP_WORDS = new Set(loadStopWords());
+
+        const CLUSTER_COLORS = [
+            '#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b',
+            '#fa709a', '#fee140', '#30cfd0', '#a8edea', '#fed6e3',
+            '#c471f5', '#fa7474', '#ffd89b', '#19d0d0', '#f7b733'
+        ];
+
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const vizContainer = document.getElementById('vizContainer');
+        const columnModal = document.getElementById('columnModal');
+        const stopWordsModal = document.getElementById('stopWordsModal');
+        const settingsModal = document.getElementById('settingsModal');
+
+        let currentZoom = d3.zoomIdentity;
+        let svg, g, simulation;
+        let currentRawData = null;
+        let currentData = null;
+        let currentView = 'network';
+        let selectedCluster = null;
+        let selectedColumns = [];
+        let availableColumns = [];
+        
+        // Analysis settings
+        let analysisSettings = {
+            topWords: 50,
+            minCoOccurrence: 3,
+            resolution: 1.2
+        };
+
+        // File drop handling
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('drag-over'));
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('drag-over'));
+        });
+
+        dropArea.addEventListener('click', () => fileInput.click());
+        dropArea.addEventListener('drop', e => {
+            const files = e.dataTransfer.files;
+            if (files.length) handleFile(files[0]);
+        });
+
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        // View tabs
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentView = btn.dataset.view;
+                if (currentData) drawVisualization(currentData);
+            });
+        });
+
+        // Zoom controls
+        document.getElementById('btnReset').addEventListener('click', () => {
+            selectedCluster = null;
+            document.querySelectorAll('.cluster-item').forEach(i => i.classList.remove('active'));
+            
+            if (g) {
+                g.selectAll('.node').transition().duration(300).style('opacity', 1);
+                g.selectAll('.link').transition().duration(300).style('opacity', 0.3);
+                g.selectAll('.hull').transition().duration(300).style('opacity', 1);
+            }
+            
+            svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+        });
+
+        document.getElementById('btnZoomIn').addEventListener('click', () => {
+            svg.transition().duration(300).call(zoom.scaleBy, 1.3);
+        });
+
+        document.getElementById('btnZoomOut').addEventListener('click', () => {
+            svg.transition().duration(300).call(zoom.scaleBy, 0.7);
+        });
+
+        document.getElementById('btnChangeColumns').addEventListener('click', () => {
+            if (currentRawData) {
+                showColumnModal();
+            }
+        });
+
+        document.getElementById('btnStopWords').addEventListener('click', () => {
+            showStopWordsModal();
+        });
+
+        document.getElementById('btnSettings').addEventListener('click', () => {
+            showSettingsModal();
+        });
+
+        // Modal controls
+        document.getElementById('btnCancelColumns').addEventListener('click', () => {
+            columnModal.classList.remove('active');
+        });
+
+        document.getElementById('btnAnalyzeColumns').addEventListener('click', () => {
+            const selected = Array.from(document.querySelectorAll('#columnList input:checked'))
+                .map(cb => cb.value);
+
+            if (selected.length === 0) {
+                alert('Please select at least one column');
+                return;
+            }
+
+            if (selected.length > 3) {
+                alert('Please select a maximum of 3 columns');
+                return;
+            }
+
+            selectedColumns = selected;
+            columnModal.classList.remove('active');
+            processData();
+        });
+
+        // Stop words modal controls
+        document.getElementById('btnCancelStopWords').addEventListener('click', () => {
+            stopWordsModal.classList.remove('active');
+        });
+
+        document.getElementById('btnSaveStopWords').addEventListener('click', () => {
+            const words = Array.from(STOP_WORDS);
+            saveStopWords(words);
+            stopWordsModal.classList.remove('active');
+            
+            // Re-analyze if we have data
+            if (currentRawData && selectedColumns.length > 0) {
+                processData();
+            }
+        });
+
+        document.getElementById('btnAddStopWord').addEventListener('click', () => {
+            addStopWord();
+        });
+
+        document.getElementById('newStopWord').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addStopWord();
+            }
+        });
+
+        document.getElementById('btnResetStopWords').addEventListener('click', () => {
+            if (confirm('Reset stop words to defaults?')) {
+                STOP_WORDS = new Set([...DEFAULT_STOP_WORDS]);
+                renderStopWords();
+            }
+        });
+
+        // Settings modal controls
+        document.getElementById('btnCancelSettings').addEventListener('click', () => {
+            settingsModal.classList.remove('active');
+        });
+
+        document.getElementById('btnApplySettings').addEventListener('click', () => {
+            analysisSettings.topWords = parseInt(document.getElementById('topWordsSlider').value);
+            analysisSettings.minCoOccurrence = parseInt(document.getElementById('minCoOccurSlider').value);
+            analysisSettings.resolution = parseFloat(document.getElementById('resolutionSlider').value);
+            
+            settingsModal.classList.remove('active');
+            
+            if (currentRawData && selectedColumns.length > 0) {
+                processData();
+            }
+        });
+
+        document.getElementById('btnResetSettings').addEventListener('click', () => {
+            analysisSettings = {
+                topWords: 50,
+                minCoOccurrence: 3,
+                resolution: 1.2
+            };
+            updateSettingsUI();
+        });
+
+        // Update slider value displays
+        document.getElementById('topWordsSlider').addEventListener('input', (e) => {
+            document.getElementById('topWordsValue').textContent = e.target.value;
+        });
+
+        document.getElementById('minCoOccurSlider').addEventListener('input', (e) => {
+            document.getElementById('minCoOccurValue').textContent = e.target.value;
+        });
+
+        document.getElementById('resolutionSlider').addEventListener('input', (e) => {
+            document.getElementById('resolutionValue').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
+        function showSettingsModal() {
+            updateSettingsUI();
+            settingsModal.classList.add('active');
+        }
+
+        function updateSettingsUI() {
+            document.getElementById('topWordsSlider').value = analysisSettings.topWords;
+            document.getElementById('topWordsValue').textContent = analysisSettings.topWords;
+            
+            document.getElementById('minCoOccurSlider').value = analysisSettings.minCoOccurrence;
+            document.getElementById('minCoOccurValue').textContent = analysisSettings.minCoOccurrence;
+            
+            document.getElementById('resolutionSlider').value = analysisSettings.resolution;
+            document.getElementById('resolutionValue').textContent = analysisSettings.resolution.toFixed(1);
+        }
+
+        function addStopWord() {
+            const input = document.getElementById('newStopWord');
+            const word = input.value.trim().toLowerCase();
+            
+            if (!word) return;
+            
+            if (word.length < 2) {
+                alert('Stop word must be at least 2 characters');
+                return;
+            }
+
+            STOP_WORDS.add(word);
+            input.value = '';
+            renderStopWords();
+        }
+
+        function removeStopWord(word) {
+            STOP_WORDS.delete(word);
+            renderStopWords();
+        }
+
+        function showStopWordsModal() {
+            renderStopWords();
+            stopWordsModal.classList.add('active');
+        }
+
+        function renderStopWords() {
+            const container = document.getElementById('stopWordsList');
+            container.innerHTML = '';
+
+            const sortedWords = Array.from(STOP_WORDS).sort();
+            
+            if (sortedWords.length === 0) {
+                container.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No stop words defined</p>';
+                return;
+            }
+
+            sortedWords.forEach(word => {
+                const tag = document.createElement('div');
+                tag.className = 'stop-word-tag';
+                tag.innerHTML = `
+                    <span>${word}</span>
+                    <span class="remove-icon">×</span>
+                `;
+                
+                tag.addEventListener('click', () => removeStopWord(word));
+                container.appendChild(tag);
+            });
+        }
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.csv')) {
+                alert('Please upload a CSV file');
+                return;
+            }
+
+            loading.style.display = 'block';
+            vizContainer.classList.remove('active');
+
+            Papa.parse(file, {
+                header: true,
+                complete: (results) => {
+                    currentRawData = results.data.filter(row => {
+                        return Object.values(row).some(val => val && val.trim());
+                    });
+
+                    if (currentRawData.length === 0) {
+                        alert('No valid rows found in CSV');
+                        loading.style.display = 'none';
+                        return;
+                    }
+
+                    // Get available columns (those with text data)
+                    const sampleRow = currentRawData[0];
+                    availableColumns = Object.keys(sampleRow).filter(key => {
+                        return currentRawData.some(row => row[key] && row[key].trim().length > 0);
+                    });
+
+                    if (availableColumns.length === 0) {
+                        alert('No text columns found in CSV');
+                        loading.style.display = 'none';
+                        return;
+                    }
+
+                    loading.style.display = 'none';
+                    showColumnModal();
+                },
+                error: err => {
+                    alert('Error parsing CSV: ' + err);
+                    loading.style.display = 'none';
+                }
+            });
+        }
+
+        function showColumnModal() {
+            const columnList = document.getElementById('columnList');
+            columnList.innerHTML = '';
+
+            availableColumns.forEach(col => {
+                const item = document.createElement('div');
+                item.className = 'column-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = col;
+                checkbox.id = `col_${col}`;
+                checkbox.checked = selectedColumns.includes(col);
+
+                // Limit to 3 selections
+                checkbox.addEventListener('change', (e) => {
+                    const checked = document.querySelectorAll('#columnList input:checked');
+                    if (checked.length > 3) {
+                        e.target.checked = false;
+                        alert('Maximum 3 columns allowed');
+                    }
+                });
+
+                const label = document.createElement('label');
+                label.htmlFor = `col_${col}`;
+                label.textContent = col;
+
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                
+                item.addEventListener('click', (e) => {
+                    if (e.target !== checkbox) {
+                        const checked = document.querySelectorAll('#columnList input:checked');
+                        if (!checkbox.checked && checked.length >= 3) {
+                            alert('Maximum 3 columns allowed');
+                            return;
+                        }
+                        checkbox.checked = !checkbox.checked;
+                    }
+                });
+
+                columnList.appendChild(item);
+            });
+
+            columnModal.classList.add('active');
+        }
+
+        function processData() {
+            try {
+                console.log('Processing data with columns:', selectedColumns);
+                loading.style.display = 'block';
+                
+                // Update selected columns info
+                document.getElementById('selectedColumnsInfo').innerHTML = 
+                    `<strong>Analyzing columns:</strong> ${selectedColumns.join(', ')}`;
+
+                // Extract and process words
+                const wordFreq = new Map();
+                const coOccurrence = new Map();
+
+                currentRawData.forEach(row => {
+                    const textParts = selectedColumns
+                        .map(col => row[col] || '')
+                        .filter(text => text.trim());
+
+                    const text = textParts.join(' ').toLowerCase();
+
+                    const words = text
+                        .replace(/[^\w\s]/g, ' ')
+                        .split(/\s+/)
+                        .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+
+                    const uniqueWords = [...new Set(words)];
+
+                    uniqueWords.forEach(word => {
+                        wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
+                    });
+
+                    for (let i = 0; i < uniqueWords.length; i++) {
+                        for (let j = i + 1; j < uniqueWords.length; j++) {
+                            const pair = [uniqueWords[i], uniqueWords[j]].sort().join('|');
+                            coOccurrence.set(pair, (coOccurrence.get(pair) || 0) + 1);
+                        }
+                    }
+                });
+
+                // Filter to top N words based on settings
+                const topWords = Array.from(wordFreq.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, analysisSettings.topWords)
+                    .map(([word]) => word);
+
+                const topWordsSet = new Set(topWords);
+
+                // Build network data
+                const nodes = Array.from(topWords).map(word => ({
+                    id: word,
+                    frequency: wordFreq.get(word)
+                }));
+
+                const links = [];
+                coOccurrence.forEach((count, pair) => {
+                    const [source, target] = pair.split('|');
+                    if (topWordsSet.has(source) && topWordsSet.has(target) && count >= analysisSettings.minCoOccurrence) {
+                        links.push({ source, target, value: count });
+                    }
+                });
+
+                // Run community detection
+                const communities = detectCommunities(nodes, links);
+                
+                // Assign communities to nodes
+                nodes.forEach(node => {
+                    node.community = communities[node.id] || 0;
+                });
+
+                // Build cluster summary
+                const clusters = buildClusterSummary(nodes, communities);
+
+                // Update stats
+                document.getElementById('rowCount').textContent = currentRawData.length;
+                document.getElementById('wordCount').textContent = nodes.length;
+                document.getElementById('edgeCount').textContent = links.length;
+                document.getElementById('clusterCount').textContent = clusters.length;
+
+                currentData = { nodes, links, clusters };
+
+                // Build cluster panel
+                buildClusterPanel(clusters);
+
+                // Draw visualization
+                drawVisualization(currentData);
+
+                loading.style.display = 'none';
+                vizContainer.classList.add('active');
+                
+            } catch (error) {
+                console.error('Error processing data:', error);
+                alert('Error processing data: ' + error.message);
+                loading.style.display = 'none';
+            }
+        }
+
+        function detectCommunities(nodes, links) {
+            try {
+                console.log('Starting community detection...');
+                
+                if (typeof graphology === 'undefined' || typeof louvain === 'undefined') {
+                    console.error('Community detection libraries not loaded, using fallback');
+                    return fallbackCommunityDetection(nodes, links);
+                }
+
+                const graph = new graphology.Graph({ type: 'undirected' });
+
+                nodes.forEach(node => {
+                    graph.addNode(node.id, { weight: node.frequency });
+                });
+
+                links.forEach(link => {
+                    const source = typeof link.source === 'object' ? link.source.id : link.source;
+                    const target = typeof link.target === 'object' ? link.target.id : link.target;
+                    if (graph.hasNode(source) && graph.hasNode(target)) {
+                        try {
+                            graph.addEdge(source, target, { weight: link.value });
+                        } catch (e) {}
+                    }
+                });
+
+                console.log(`Graph created: ${graph.order} nodes, ${graph.size} edges`);
+
+                const communities = louvain(graph, {
+                    getEdgeWeight: 'weight',
+                    resolution: analysisSettings.resolution
+                });
+
+                console.log('Community detection complete');
+                return communities;
+
+            } catch (error) {
+                console.error('Error in community detection:', error);
+                return fallbackCommunityDetection(nodes, links);
+            }
+        }
+
+        function fallbackCommunityDetection(nodes, links) {
+            console.log('Using fallback community detection');
+            
+            const communities = {};
+            const visited = new Set();
+            let currentCommunity = 0;
+
+            const adjacency = new Map();
+            nodes.forEach(node => {
+                adjacency.set(node.id, new Set());
+            });
+
+            links.forEach(link => {
+                const source = typeof link.source === 'object' ? link.source.id : link.source;
+                const target = typeof link.target === 'object' ? link.target.id : link.target;
+                adjacency.get(source)?.add(target);
+                adjacency.get(target)?.add(source);
+            });
+
+            function dfs(nodeId, community) {
+                visited.add(nodeId);
+                communities[nodeId] = community;
+                
+                adjacency.get(nodeId)?.forEach(neighbor => {
+                    if (!visited.has(neighbor)) {
+                        dfs(neighbor, community);
+                    }
+                });
+            }
+
+            nodes.forEach(node => {
+                if (!visited.has(node.id)) {
+                    dfs(node.id, currentCommunity);
+                    currentCommunity++;
+                }
+            });
+
+            return communities;
+        }
+
+        function buildClusterSummary(nodes, communities) {
+            const clusterMap = new Map();
+
+            nodes.forEach(node => {
+                const cluster = node.community;
+                if (!clusterMap.has(cluster)) {
+                    clusterMap.set(cluster, []);
+                }
+                clusterMap.get(cluster).push(node);
+            });
+
+            const clusters = Array.from(clusterMap.entries()).map(([id, nodes]) => {
+                const sortedNodes = nodes.sort((a, b) => b.frequency - a.frequency);
+                const topKeywords = sortedNodes.slice(0, 5).map(n => n.id);
+                
+                return {
+                    id,
+                    name: `Topic ${id + 1}`,
+                    keywords: topKeywords,
+                    nodeCount: nodes.length,
+                    color: CLUSTER_COLORS[id % CLUSTER_COLORS.length],
+                    nodes: sortedNodes
+                };
+            });
+
+            return clusters.sort((a, b) => b.nodeCount - a.nodeCount);
+        }
+
+        function buildClusterPanel(clusters) {
+            const panel = document.getElementById('clusterList');
+            panel.innerHTML = '';
+
+            clusters.forEach((cluster, idx) => {
+                const item = document.createElement('div');
+                item.className = 'cluster-item';
+                item.innerHTML = `
+                    <div class="cluster-header">
+                        <div class="cluster-color" style="background: ${cluster.color}"></div>
+                        <div class="cluster-name">${cluster.name}</div>
+                        <div class="cluster-count">${cluster.nodeCount} words</div>
+                    </div>
+                    <div class="cluster-keywords">${cluster.keywords.join(', ')}</div>
+                `;
+
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.cluster-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    selectedCluster = cluster.id;
+                    highlightCluster(cluster.id);
+                });
+
+                panel.appendChild(item);
+            });
+        }
+
+        function highlightCluster(clusterId) {
+            if (!g) return;
+
+            g.selectAll('.node')
+                .transition()
+                .duration(300)
+                .style('opacity', d => d.community === clusterId ? 1 : 0.2);
+
+            g.selectAll('.link')
+                .transition()
+                .duration(300)
+                .style('opacity', d => {
+                    const sourceCommunity = typeof d.source === 'object' ? d.source.community : 
+                        currentData.nodes.find(n => n.id === d.source)?.community;
+                    const targetCommunity = typeof d.target === 'object' ? d.target.community : 
+                        currentData.nodes.find(n => n.id === d.target)?.community;
+                    return (sourceCommunity === clusterId && targetCommunity === clusterId) ? 0.6 : 0.1;
+                });
+
+            g.selectAll('.hull')
+                .transition()
+                .duration(300)
+                .style('opacity', d => d.id === clusterId ? 1 : 0.1);
+
+            zoomToCluster(clusterId);
+        }
+
+        function zoomToCluster(clusterId) {
+            if (!svg || !currentData) return;
+
+            const container = document.getElementById('networkContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            if (currentView === 'network') {
+                const clusterNodes = currentData.nodes.filter(n => n.community === clusterId);
+                
+                if (clusterNodes.length === 0) return;
+
+                const xs = clusterNodes.map(n => n.x);
+                const ys = clusterNodes.map(n => n.y);
+                
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minY = Math.min(...ys);
+                const maxY = Math.max(...ys);
+
+                const boundsWidth = maxX - minX;
+                const boundsHeight = maxY - minY;
+                const centerX = (minX + maxX) / 2;
+                const centerY = (minY + maxY) / 2;
+
+                const padding = 100;
+                const scaleX = width / (boundsWidth + padding);
+                const scaleY = height / (boundsHeight + padding);
+                const scale = Math.min(scaleX, scaleY, 2);
+
+                const translateX = width / 2 - centerX * scale;
+                const translateY = height / 2 - centerY * scale;
+
+                svg.transition()
+                    .duration(750)
+                    .call(
+                        zoom.transform,
+                        d3.zoomIdentity
+                            .translate(translateX, translateY)
+                            .scale(scale)
+                    );
+
+            } else if (currentView === 'community') {
+                const clusters = currentData.clusters;
+                const clusterIndex = clusters.findIndex(c => c.id === clusterId);
+                
+                if (clusterIndex === -1) return;
+
+                const cols = Math.ceil(Math.sqrt(clusters.length));
+                const rows = Math.ceil(clusters.length / cols);
+                const cellWidth = width / cols;
+                const cellHeight = height / rows;
+
+                const col = clusterIndex % cols;
+                const row = Math.floor(clusterIndex / cols);
+                const cx = col * cellWidth + cellWidth / 2;
+                const cy = row * cellHeight + cellHeight / 2;
+
+                const scale = 1.5;
+                const translateX = width / 2 - cx * scale;
+                const translateY = height / 2 - cy * scale;
+
+                svg.transition()
+                    .duration(750)
+                    .call(
+                        zoom.transform,
+                        d3.zoomIdentity
+                            .translate(translateX, translateY)
+                            .scale(scale)
+                    );
+            }
+        }
+
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+                g.attr('transform', event.transform);
+            });
+
+        function drawVisualization(data) {
+            if (currentView === 'network') {
+                drawNetworkView(data);
+            } else {
+                drawCommunityView(data);
+            }
+        }
+
+        function drawNetworkView(data) {
+            svg = d3.select('#network');
+            svg.selectAll('*').remove();
+
+            const container = document.getElementById('networkContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg.call(zoom);
+
+            g = svg.append('g');
+
+            const hullGroup = g.append('g').attr('class', 'hulls');
+
+            simulation = d3.forceSimulation(data.nodes)
+                .force('link', d3.forceLink(data.links).id(d => d.id).distance(120))
+                .force('charge', d3.forceManyBody().strength(-400))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.frequency) * 3 + 10));
+
+            const link = g.append('g')
+                .selectAll('line')
+                .data(data.links)
+                .join('line')
+                .attr('class', 'link')
+                .attr('stroke-width', d => Math.min(Math.sqrt(d.value) * 1.5, 5));
+
+            const node = g.append('g')
+                .selectAll('g')
+                .data(data.nodes)
+                .join('g')
+                .attr('class', 'node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            const maxFreq = d3.max(data.nodes, d => d.frequency);
+            const radiusScale = d3.scaleSqrt()
+                .domain([0, maxFreq])
+                .range([8, 25]);
+
+            node.append('circle')
+                .attr('r', d => radiusScale(d.frequency))
+                .attr('fill', d => CLUSTER_COLORS[d.community % CLUSTER_COLORS.length])
+                .attr('opacity', 0.85);
+
+            node.append('text')
+                .text(d => d.id)
+                .attr('text-anchor', 'middle')
+                .attr('dy', d => -radiusScale(d.frequency) - 4);
+
+            const tooltip = d3.select('#tooltip');
+
+            node.on('mouseover', function(event, d) {
+                d3.select(this).select('circle')
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 1)
+                    .attr('r', radiusScale(d.frequency) * 1.2);
+
+                tooltip
+                    .style('opacity', 1)
+                    .html(`<strong>${d.id}</strong><br/>Frequency: ${d.frequency}<br/>Topic ${d.community + 1}`)
+                    .style('left', (event.pageX + 10) + 'px')
+                    .style('top', (event.pageY - 10) + 'px');
+            })
+            .on('mouseout', function(event, d) {
+                d3.select(this).select('circle')
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 0.85)
+                    .attr('r', radiusScale(d.frequency));
+
+                tooltip.style('opacity', 0);
+            });
+
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+
+                updateHulls();
+            });
+
+            function updateHulls() {
+                const clusters = d3.group(data.nodes, d => d.community);
+                
+                const hulls = hullGroup.selectAll('.hull')
+                    .data(Array.from(clusters.entries()), d => d[0]);
+
+                hulls.exit().remove();
+
+                hulls.enter()
+                    .append('path')
+                    .attr('class', 'hull')
+                    .attr('fill', d => CLUSTER_COLORS[d[0] % CLUSTER_COLORS.length])
+                    .attr('stroke', d => CLUSTER_COLORS[d[0] % CLUSTER_COLORS.length])
+                    .merge(hulls)
+                    .attr('d', d => {
+                        const points = d[1].map(node => [node.x, node.y]);
+                        return points.length > 2 ? drawHull(points) : null;
+                    })
+                    .datum(d => ({ id: d[0] }));
+            }
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        function drawCommunityView(data) {
+            svg = d3.select('#network');
+            svg.selectAll('*').remove();
+
+            const container = document.getElementById('networkContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg.call(zoom);
+
+            g = svg.append('g');
+
+            const clusters = d3.group(data.nodes, d => d.community);
+            const clusterArray = Array.from(clusters.entries());
+
+            const cols = Math.ceil(Math.sqrt(clusterArray.length));
+            const rows = Math.ceil(clusterArray.length / cols);
+            const cellWidth = width / cols;
+            const cellHeight = height / rows;
+
+            clusterArray.forEach(([clusterId, nodes], idx) => {
+                const col = idx % cols;
+                const row = Math.floor(idx / cols);
+                const cx = col * cellWidth + cellWidth / 2;
+                const cy = row * cellHeight + cellHeight / 2;
+
+                const clusterGroup = g.append('g')
+                    .attr('class', 'cluster-group')
+                    .attr('transform', `translate(${cx}, ${cy})`);
+
+                const radius = Math.min(cellWidth, cellHeight) / 2 - 40;
+                clusterGroup.append('circle')
+                    .attr('r', radius)
+                    .attr('fill', CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length])
+                    .attr('opacity', 0.1)
+                    .attr('stroke', CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length])
+                    .attr('stroke-width', 2);
+
+                clusterGroup.append('text')
+                    .attr('y', -radius - 10)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-weight', 'bold')
+                    .attr('font-size', '14px')
+                    .attr('fill', CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length])
+                    .text(`Topic ${clusterId + 1} (${nodes.length})`);
+
+                const angleStep = (2 * Math.PI) / nodes.length;
+                const nodeRadius = radius * 0.6;
+
+                nodes.forEach((node, i) => {
+                    const angle = i * angleStep;
+                    const x = Math.cos(angle) * nodeRadius;
+                    const y = Math.sin(angle) * nodeRadius;
+
+                    const maxFreq = d3.max(data.nodes, d => d.frequency);
+                    const radiusScale = d3.scaleSqrt()
+                        .domain([0, maxFreq])
+                        .range([6, 18]);
+
+                    const nodeGroup = clusterGroup.append('g')
+                        .attr('transform', `translate(${x}, ${y})`)
+                        .attr('class', 'node');
+
+                    nodeGroup.append('circle')
+                        .attr('r', radiusScale(node.frequency))
+                        .attr('fill', CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length])
+                        .attr('opacity', 0.85)
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 2);
+
+                    nodeGroup.append('text')
+                        .text(node.id)
+                        .attr('text-anchor', 'middle')
+                        .attr('dy', -radiusScale(node.frequency) - 4)
+                        .attr('font-size', '10px')
+                        .attr('font-weight', '600')
+                        .attr('fill', '#333')
+                        .style('text-shadow', '-1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white');
+
+                    const tooltip = d3.select('#tooltip');
+
+                    nodeGroup.on('mouseover', function(event) {
+                        d3.select(this).select('circle')
+                            .transition()
+                            .duration(200)
+                            .attr('opacity', 1)
+                            .attr('r', radiusScale(node.frequency) * 1.2);
+
+                        tooltip
+                            .style('opacity', 1)
+                            .html(`<strong>${node.id}</strong><br/>Frequency: ${node.frequency}<br/>Topic ${clusterId + 1}`)
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 10) + 'px');
+                    })
+                    .on('mouseout', function() {
+                        d3.select(this).select('circle')
+                            .transition()
+                            .duration(200)
+                            .attr('opacity', 0.85)
+                            .attr('r', radiusScale(node.frequency));
+
+                        tooltip.style('opacity', 0);
+                    });
+                });
+            });
+        }
+
+        function drawHull(points) {
+            if (points.length < 3) return null;
+
+            const centroid = points.reduce((acc, p) => [acc[0] + p[0], acc[1] + p[1]], [0, 0])
+                .map(v => v / points.length);
+
+            const expandedPoints = points.map(p => {
+                const dx = p[0] - centroid[0];
+                const dy = p[1] - centroid[1];
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const scale = 1 + 30 / (dist + 1);
+                return [
+                    centroid[0] + dx * scale,
+                    centroid[1] + dy * scale
+                ];
+            });
+
+            const hull = d3.polygonHull(expandedPoints);
+            if (!hull) return null;
+
+            return 'M' + hull.join('L') + 'Z';
+        }
+    </script>
+</body>
+</html>
