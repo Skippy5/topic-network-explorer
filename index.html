@@ -1018,10 +1018,15 @@
             analysisSettings.minCoOccurrence = parseInt(document.getElementById('minCoOccurSlider').value);
             analysisSettings.resolution = parseFloat(document.getElementById('resolutionSlider').value);
             
+            console.log('Settings updated:', analysisSettings);
+            
             settingsModal.classList.remove('active');
             
-            if (currentRawData && selectedColumns.length > 0) {
+            if (currentRawData && selectedTextColumns.length > 0) {
+                console.log('Re-analyzing with new settings...');
                 processData();
+            } else {
+                console.warn('Cannot re-analyze: no data or columns selected');
             }
         });
 
