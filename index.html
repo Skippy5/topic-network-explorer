@@ -156,6 +156,75 @@
             color: #333;
         }
 
+        .filter-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .filter-section h4 {
+            margin-bottom: 10px;
+            color: #fa709a;
+            font-size: 14px;
+        }
+
+        .filter-values {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .filter-value-item {
+            padding: 6px 12px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-value-item:hover {
+            border-color: #fa709a;
+            background: #fff0f5;
+        }
+
+        .filter-value-item.selected {
+            background: #fa709a;
+            color: white;
+            border-color: #fa709a;
+        }
+
+        .filter-value-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        .filter-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-actions button {
+            padding: 4px 12px;
+            font-size: 12px;
+            background: #e0e0e0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .filter-actions button:hover {
+            background: #d0d0d0;
+        }
+
         .modal-actions {
             display: flex;
             gap: 10px;
@@ -497,6 +566,10 @@
             </div>
 
             <div class="selected-columns" id="selectedColumnsInfo"></div>
+            <div class="selected-columns" id="activeFiltersInfo" style="display: none; background: #fff4e6; border-left: 3px solid #fa709a;">
+                <strong style="color: #fa709a;">Active Filters:</strong> <span id="filtersSummary"></span>
+                <button class="btn" id="btnChangeFilters" style="margin-left: 10px; padding: 4px 12px; font-size: 12px;">Change Filters</button>
+            </div>
             
             <div class="help-text">
                 💡 <strong>Tip:</strong> Clusters show related topics | Click cluster in panel to highlight | Drag nodes to rearrange
@@ -538,15 +611,46 @@
 
     <!-- Column Selection Modal -->
     <div class="modal" id="columnModal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 700px;">
             <div class="modal-header">
-                <h2>Select Columns to Analyze</h2>
-                <p>Choose 1-3 text columns from your CSV</p>
+                <h2>Configure Analysis</h2>
+                <p>Select text columns to analyze and optional filter columns</p>
             </div>
-            <div class="column-list" id="columnList"></div>
+            
+            <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                <div style="flex: 1;">
+                    <h3 style="font-size: 15px; margin-bottom: 10px; color: #667eea;">📝 Text Columns (1-3 required)</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Columns containing text to analyze for keywords</p>
+                    <div class="column-list" id="textColumnList" style="max-height: 250px;"></div>
+                </div>
+                
+                <div style="flex: 1;">
+                    <h3 style="font-size: 15px; margin-bottom: 10px; color: #fa709a;">🔍 Filter Columns (0-2 optional)</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Columns to use as filters (category, status, etc.)</p>
+                    <div class="column-list" id="filterColumnList" style="max-height: 250px;"></div>
+                </div>
+            </div>
+            
             <div class="modal-actions">
                 <button class="modal-btn secondary" id="btnCancelColumns">Cancel</button>
-                <button class="modal-btn primary" id="btnAnalyzeColumns">Analyze</button>
+                <button class="modal-btn primary" id="btnAnalyzeColumns">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Values Modal -->
+    <div class="modal" id="filterValuesModal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>Select Filter Values</h2>
+                <p>Choose which values to include in the analysis</p>
+            </div>
+            
+            <div id="filterSections"></div>
+            
+            <div class="modal-actions">
+                <button class="modal-btn secondary" id="btnCancelFilters">Cancel</button>
+                <button class="modal-btn primary" id="btnApplyFilters">Analyze</button>
             </div>
         </div>
     </div>
@@ -710,6 +814,7 @@
         const loading = document.getElementById('loading');
         const vizContainer = document.getElementById('vizContainer');
         const columnModal = document.getElementById('columnModal');
+        const filterValuesModal = document.getElementById('filterValuesModal');
         const stopWordsModal = document.getElementById('stopWordsModal');
         const settingsModal = document.getElementById('settingsModal');
 
@@ -719,7 +824,9 @@
         let currentData = null;
         let currentView = 'network';
         let selectedCluster = null;
-        let selectedColumns = [];
+        let selectedTextColumns = [];
+        let selectedFilterColumns = [];
+        let selectedFilterValues = {};
         let availableColumns = [];
         
         // Analysis settings
@@ -809,22 +916,63 @@
         });
 
         document.getElementById('btnAnalyzeColumns').addEventListener('click', () => {
-            const selected = Array.from(document.querySelectorAll('#columnList input:checked'))
+            const textCols = Array.from(document.querySelectorAll('#textColumnList input:checked'))
+                .map(cb => cb.value);
+            const filterCols = Array.from(document.querySelectorAll('#filterColumnList input:checked'))
                 .map(cb => cb.value);
 
-            if (selected.length === 0) {
-                alert('Please select at least one column');
+            if (textCols.length === 0) {
+                alert('Please select at least one text column');
                 return;
             }
 
-            if (selected.length > 3) {
-                alert('Please select a maximum of 3 columns');
+            if (textCols.length > 3) {
+                alert('Please select a maximum of 3 text columns');
                 return;
             }
 
-            selectedColumns = selected;
+            if (filterCols.length > 2) {
+                alert('Please select a maximum of 2 filter columns');
+                return;
+            }
+
+            selectedTextColumns = textCols;
+            selectedFilterColumns = filterCols;
             columnModal.classList.remove('active');
+
+            // If filters selected, show filter values modal
+            if (filterCols.length > 0) {
+                showFilterValuesModal();
+            } else {
+                selectedFilterValues = {};
+                processData();
+            }
+        });
+
+        document.getElementById('btnCancelFilters').addEventListener('click', () => {
+            filterValuesModal.classList.remove('active');
+        });
+
+        document.getElementById('btnApplyFilters').addEventListener('click', () => {
+            // Collect selected filter values
+            selectedFilterValues = {};
+            
+            selectedFilterColumns.forEach(col => {
+                const checked = Array.from(document.querySelectorAll(`#filter_${sanitizeId(col)} input:checked`))
+                    .map(cb => cb.value);
+                if (checked.length > 0) {
+                    selectedFilterValues[col] = checked;
+                }
+            });
+
+            filterValuesModal.classList.remove('active');
             processData();
+        });
+
+        document.getElementById('btnChangeFilters').addEventListener('click', () => {
+            if (selectedFilterColumns.length > 0) {
+                showFilterValuesModal();
+            }
         });
 
         // Stop words modal controls
@@ -1009,68 +1157,217 @@
             });
         }
 
+        function sanitizeId(str) {
+            return str.replace(/[^a-z0-9]/gi, '_');
+        }
+
         function showColumnModal() {
-            const columnList = document.getElementById('columnList');
-            columnList.innerHTML = '';
+            const textColumnList = document.getElementById('textColumnList');
+            const filterColumnList = document.getElementById('filterColumnList');
+            
+            textColumnList.innerHTML = '';
+            filterColumnList.innerHTML = '';
 
             availableColumns.forEach(col => {
-                const item = document.createElement('div');
-                item.className = 'column-item';
+                // Text columns
+                const textItem = document.createElement('div');
+                textItem.className = 'column-item';
                 
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.value = col;
-                checkbox.id = `col_${col}`;
-                checkbox.checked = selectedColumns.includes(col);
+                const textCheckbox = document.createElement('input');
+                textCheckbox.type = 'checkbox';
+                textCheckbox.value = col;
+                textCheckbox.id = `text_${sanitizeId(col)}`;
+                textCheckbox.checked = selectedTextColumns.includes(col);
 
-                // Limit to 3 selections
-                checkbox.addEventListener('change', (e) => {
-                    const checked = document.querySelectorAll('#columnList input:checked');
+                textCheckbox.addEventListener('change', (e) => {
+                    const checked = document.querySelectorAll('#textColumnList input:checked');
                     if (checked.length > 3) {
                         e.target.checked = false;
-                        alert('Maximum 3 columns allowed');
+                        alert('Maximum 3 text columns allowed');
                     }
                 });
 
-                const label = document.createElement('label');
-                label.htmlFor = `col_${col}`;
-                label.textContent = col;
+                const textLabel = document.createElement('label');
+                textLabel.htmlFor = `text_${sanitizeId(col)}`;
+                textLabel.textContent = col;
 
-                item.appendChild(checkbox);
-                item.appendChild(label);
+                textItem.appendChild(textCheckbox);
+                textItem.appendChild(textLabel);
                 
-                item.addEventListener('click', (e) => {
-                    if (e.target !== checkbox) {
-                        const checked = document.querySelectorAll('#columnList input:checked');
-                        if (!checkbox.checked && checked.length >= 3) {
-                            alert('Maximum 3 columns allowed');
+                textItem.addEventListener('click', (e) => {
+                    if (e.target !== textCheckbox) {
+                        const checked = document.querySelectorAll('#textColumnList input:checked');
+                        if (!textCheckbox.checked && checked.length >= 3) {
+                            alert('Maximum 3 text columns allowed');
                             return;
                         }
-                        checkbox.checked = !checkbox.checked;
+                        textCheckbox.checked = !textCheckbox.checked;
                     }
                 });
 
-                columnList.appendChild(item);
+                textColumnList.appendChild(textItem);
+
+                // Filter columns
+                const filterItem = document.createElement('div');
+                filterItem.className = 'column-item';
+                
+                const filterCheckbox = document.createElement('input');
+                filterCheckbox.type = 'checkbox';
+                filterCheckbox.value = col;
+                filterCheckbox.id = `filter_col_${sanitizeId(col)}`;
+                filterCheckbox.checked = selectedFilterColumns.includes(col);
+
+                filterCheckbox.addEventListener('change', (e) => {
+                    const checked = document.querySelectorAll('#filterColumnList input:checked');
+                    if (checked.length > 2) {
+                        e.target.checked = false;
+                        alert('Maximum 2 filter columns allowed');
+                    }
+                });
+
+                const filterLabel = document.createElement('label');
+                filterLabel.htmlFor = `filter_col_${sanitizeId(col)}`;
+                filterLabel.textContent = col;
+
+                filterItem.appendChild(filterCheckbox);
+                filterItem.appendChild(filterLabel);
+                
+                filterItem.addEventListener('click', (e) => {
+                    if (e.target !== filterCheckbox) {
+                        const checked = document.querySelectorAll('#filterColumnList input:checked');
+                        if (!filterCheckbox.checked && checked.length >= 2) {
+                            alert('Maximum 2 filter columns allowed');
+                            return;
+                        }
+                        filterCheckbox.checked = !filterCheckbox.checked;
+                    }
+                });
+
+                filterColumnList.appendChild(filterItem);
             });
 
             columnModal.classList.add('active');
         }
 
+        function showFilterValuesModal() {
+            const container = document.getElementById('filterSections');
+            container.innerHTML = '';
+
+            selectedFilterColumns.forEach(col => {
+                // Get unique values for this column
+                const uniqueValues = [...new Set(currentRawData.map(row => row[col]).filter(v => v && v.trim()))]
+                    .sort();
+
+                const section = document.createElement('div');
+                section.className = 'filter-section';
+                section.id = `filter_${sanitizeId(col)}`;
+
+                const header = document.createElement('h4');
+                header.textContent = col;
+                section.appendChild(header);
+
+                const actions = document.createElement('div');
+                actions.className = 'filter-actions';
+                actions.innerHTML = `
+                    <button onclick="selectAllFilterValues('${sanitizeId(col)}')">Select All</button>
+                    <button onclick="deselectAllFilterValues('${sanitizeId(col)}')">Deselect All</button>
+                `;
+                section.appendChild(actions);
+
+                const valuesContainer = document.createElement('div');
+                valuesContainer.className = 'filter-values';
+
+                uniqueValues.forEach(value => {
+                    const item = document.createElement('div');
+                    item.className = 'filter-value-item';
+                    
+                    const isSelected = selectedFilterValues[col]?.includes(value) ?? true; // Default: all selected
+                    if (isSelected) item.classList.add('selected');
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = value;
+                    checkbox.checked = isSelected;
+                    checkbox.style.display = 'none';
+
+                    const label = document.createElement('span');
+                    label.textContent = value;
+
+                    item.appendChild(checkbox);
+                    item.appendChild(label);
+
+                    item.addEventListener('click', () => {
+                        checkbox.checked = !checkbox.checked;
+                        item.classList.toggle('selected');
+                    });
+
+                    valuesContainer.appendChild(item);
+                });
+
+                section.appendChild(valuesContainer);
+                container.appendChild(section);
+            });
+
+            filterValuesModal.classList.add('active');
+        }
+
+        // Global functions for select/deselect all
+        window.selectAllFilterValues = function(colId) {
+            const items = document.querySelectorAll(`#filter_${colId} .filter-value-item`);
+            items.forEach(item => {
+                item.classList.add('selected');
+                item.querySelector('input').checked = true;
+            });
+        };
+
+        window.deselectAllFilterValues = function(colId) {
+            const items = document.querySelectorAll(`#filter_${colId} .filter-value-item`);
+            items.forEach(item => {
+                item.classList.remove('selected');
+                item.querySelector('input').checked = false;
+            });
+        };
+
         function processData() {
             try {
-                console.log('Processing data with columns:', selectedColumns);
+                console.log('Processing data - Text columns:', selectedTextColumns, 'Filter columns:', selectedFilterColumns);
                 loading.style.display = 'block';
                 
                 // Update selected columns info
                 document.getElementById('selectedColumnsInfo').innerHTML = 
-                    `<strong>Analyzing columns:</strong> ${selectedColumns.join(', ')}`;
+                    `<strong>Analyzing columns:</strong> ${selectedTextColumns.join(', ')}`;
 
-                // Extract and process words
+                // Update filter info
+                if (selectedFilterColumns.length > 0 && Object.keys(selectedFilterValues).length > 0) {
+                    const filterSummary = Object.entries(selectedFilterValues)
+                        .map(([col, values]) => `${col}: ${values.length} selected`)
+                        .join(' | ');
+                    
+                    document.getElementById('filtersSummary').textContent = filterSummary;
+                    document.getElementById('activeFiltersInfo').style.display = 'block';
+                } else {
+                    document.getElementById('activeFiltersInfo').style.display = 'none';
+                }
+
+                // Filter data based on selected filter values
+                let filteredData = currentRawData;
+                
+                if (Object.keys(selectedFilterValues).length > 0) {
+                    filteredData = currentRawData.filter(row => {
+                        return Object.entries(selectedFilterValues).every(([col, values]) => {
+                            return values.includes(row[col]);
+                        });
+                    });
+                }
+
+                console.log(`Filtered from ${currentRawData.length} to ${filteredData.length} rows`);
+
+                // Extract and process words from filtered data
                 const wordFreq = new Map();
                 const coOccurrence = new Map();
 
-                currentRawData.forEach(row => {
-                    const textParts = selectedColumns
+                filteredData.forEach(row => {
+                    const textParts = selectedTextColumns
                         .map(col => row[col] || '')
                         .filter(text => text.trim());
 
@@ -1129,7 +1426,7 @@
                 const clusters = buildClusterSummary(nodes, communities);
 
                 // Update stats
-                document.getElementById('rowCount').textContent = currentRawData.length;
+                document.getElementById('rowCount').textContent = filteredData.length;
                 document.getElementById('wordCount').textContent = nodes.length;
                 document.getElementById('edgeCount').textContent = links.length;
                 document.getElementById('clusterCount').textContent = clusters.length;
