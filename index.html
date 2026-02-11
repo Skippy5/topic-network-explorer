@@ -1362,6 +1362,25 @@
 
                 console.log(`Filtered from ${currentRawData.length} to ${filteredData.length} rows`);
 
+                if (filteredData.length === 0) {
+                    alert('No rows match the selected filters. Please adjust your filter selection.');
+                    loading.style.display = 'none';
+                    return;
+                }
+
+                if (filteredData.length < 10) {
+                    alert(`Warning: Only ${filteredData.length} rows after filtering. Clustering may not be meaningful with so few rows. Consider selecting more filter values.`);
+                }
+
+                // Auto-adjust settings for smaller datasets
+                const adjustedSettings = { ...analysisSettings };
+                if (filteredData.length < 50) {
+                    // For small datasets, reduce requirements
+                    adjustedSettings.topWords = Math.min(30, analysisSettings.topWords);
+                    adjustedSettings.minCoOccurrence = Math.max(2, Math.floor(filteredData.length / 20));
+                    console.log(`Auto-adjusted settings for ${filteredData.length} rows:`, adjustedSettings);
+                }
+
                 // Extract and process words from filtered data
                 const wordFreq = new Map();
                 const coOccurrence = new Map();
@@ -1392,11 +1411,13 @@
                     }
                 });
 
-                // Filter to top N words based on settings
+                // Filter to top N words based on settings (use adjusted for small datasets)
                 const topWords = Array.from(wordFreq.entries())
                     .sort((a, b) => b[1] - a[1])
-                    .slice(0, analysisSettings.topWords)
+                    .slice(0, adjustedSettings.topWords)
                     .map(([word]) => word);
+
+                console.log(`Extracted ${wordFreq.size} unique words, using top ${topWords.length}`);
 
                 const topWordsSet = new Set(topWords);
 
@@ -1409,10 +1430,18 @@
                 const links = [];
                 coOccurrence.forEach((count, pair) => {
                     const [source, target] = pair.split('|');
-                    if (topWordsSet.has(source) && topWordsSet.has(target) && count >= analysisSettings.minCoOccurrence) {
+                    if (topWordsSet.has(source) && topWordsSet.has(target) && count >= adjustedSettings.minCoOccurrence) {
                         links.push({ source, target, value: count });
                     }
                 });
+
+                console.log(`Created ${nodes.length} nodes and ${links.length} links`);
+
+                if (links.length === 0) {
+                    alert('No connections found between keywords. Try:\n• Reducing "Minimum Co-occurrence" in Settings\n• Selecting more filter values to get more data\n• Using different text columns');
+                    loading.style.display = 'none';
+                    return;
+                }
 
                 // Run community detection
                 const communities = detectCommunities(nodes, links);
@@ -1424,6 +1453,15 @@
 
                 // Build cluster summary
                 const clusters = buildClusterSummary(nodes, communities);
+
+                console.log(`Detected ${clusters.length} clusters:`, clusters.map(c => `${c.name}(${c.nodeCount})`).join(', '));
+
+                if (clusters.length === 1) {
+                    console.warn('Only 1 cluster detected. Suggestions:');
+                    console.warn('- Increase Cluster Sensitivity to 1.5-2.0 in Settings');
+                    console.warn('- Reduce Top Keywords to 30-40');
+                    console.warn('- Increase Minimum Co-occurrence to 4-5');
+                }
 
                 // Update stats
                 document.getElementById('rowCount').textContent = filteredData.length;
@@ -1476,9 +1514,16 @@
 
                 console.log(`Graph created: ${graph.order} nodes, ${graph.size} edges`);
 
+                // Auto-adjust resolution for small graphs
+                let resolution = analysisSettings.resolution;
+                if (graph.order < 30) {
+                    resolution = Math.max(1.5, analysisSettings.resolution);
+                    console.log(`Auto-adjusted resolution to ${resolution} for small graph`);
+                }
+
                 const communities = louvain(graph, {
                     getEdgeWeight: 'weight',
-                    resolution: analysisSettings.resolution
+                    resolution: resolution
                 });
 
                 console.log('Community detection complete');
