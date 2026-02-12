@@ -729,7 +729,7 @@
                 <div class="cluster-panel" id="clusterPanel">
                     <div class="row-range-section" id="rowRangeSection">
                         <div class="row-range-header" id="rowRangeHeader">
-                            <h4>📏 Row Range</h4>
+                            <h4>📏 Record Range</h4>
                             <span class="row-range-toggle" id="rowRangeToggle">▼</span>
                         </div>
                         <div class="row-range-body" id="rowRangeBody">
@@ -1035,6 +1035,7 @@
         let availableColumns = [];
         let rowRangeMin = 1;
         let rowRangeMax = 1;
+        let lastFilteredSize = 0; // Track filtered dataset size to avoid unnecessary resets
         
         // Analysis settings
         let analysisSettings = {
@@ -1342,7 +1343,7 @@
 
         document.getElementById('btnAutoTune').addEventListener('click', autoTuneSettings);
 
-        // Row Range controls
+        // Record Range controls
         document.getElementById('rowRangeHeader').addEventListener('click', () => {
             const body = document.getElementById('rowRangeBody');
             const toggle = document.getElementById('rowRangeToggle');
@@ -1409,7 +1410,7 @@
             const total = parseInt(maxSlider.max);
             const count = rowRangeMax - rowRangeMin + 1;
             document.getElementById('rowRangeInfo').innerHTML =
-                `Dataset: <strong>${total} rows</strong> | Analyzing: <strong>rows ${rowRangeMin}\u2013${rowRangeMax}</strong> (${count})`;
+                `Dataset: <strong>${total} records</strong> | Analyzing: <strong>records ${rowRangeMin}\u2013${rowRangeMax}</strong> (${count})`;
             document.getElementById('rowRangeMinLabel').textContent = rowRangeMin;
             document.getElementById('rowRangeMaxLabel').textContent = rowRangeMax;
         }
@@ -1738,17 +1739,17 @@
                         });
                     });
                     console.log(`Filtered from ${currentRawData.length} to ${filteredData.length} rows`);
-                    
-                    // Update row range for filtered dataset
+                } 
+
+                // Only reset record range if filtered dataset SIZE changed (not on every slider drag)
+                if (filteredData.length !== lastFilteredSize) {
+                    lastFilteredSize = filteredData.length;
                     initRowRange(filteredData.length);
-                } else {
-                    // Reset to full dataset
-                    initRowRange(currentRawData.length);
                 }
 
-                // THEN apply row range slice
+                // THEN apply record range slice
                 const rangedData = filteredData.slice(rowRangeMin - 1, rowRangeMax);
-                console.log(`Row range: ${rowRangeMin}-${rowRangeMax} (${rangedData.length} of ${filteredData.length} rows)`);
+                console.log(`Record range: ${rowRangeMin}-${rowRangeMax} (${rangedData.length} of ${filteredData.length} records)`);
                 
                 // Final dataset for analysis
                 filteredData = rangedData;
