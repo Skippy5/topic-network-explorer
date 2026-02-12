@@ -525,6 +525,156 @@
         .selected-columns strong {
             color: #667eea;
         }
+
+        /* Row Range Section */
+        .row-range-section {
+            display: none;
+            margin-bottom: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            overflow: hidden;
+        }
+
+        .row-range-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            cursor: pointer;
+            user-select: none;
+            background: #f8f9fa;
+            transition: background 0.2s;
+        }
+
+        .row-range-header:hover {
+            background: #f0f4ff;
+        }
+
+        .row-range-header h4 {
+            font-size: 13px;
+            color: #667eea;
+            margin: 0;
+        }
+
+        .row-range-toggle {
+            font-size: 12px;
+            color: #999;
+            transition: transform 0.2s;
+        }
+
+        .row-range-toggle.open {
+            transform: rotate(180deg);
+        }
+
+        .row-range-body {
+            display: none;
+            padding: 12px;
+        }
+
+        .row-range-body.open {
+            display: block;
+        }
+
+        .row-range-info {
+            font-size: 11px;
+            color: #555;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .row-range-info strong {
+            color: #667eea;
+        }
+
+        .range-slider-container {
+            position: relative;
+            height: 30px;
+            margin: 8px 0 4px;
+        }
+
+        .range-slider-container input[type="range"] {
+            position: absolute;
+            width: 100%;
+            top: 0;
+            height: 30px;
+            margin: 0;
+            pointer-events: none;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+        }
+
+        .range-slider-container input[type="range"]::-webkit-slider-runnable-track {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+        }
+
+        .range-slider-container input[type="range"]:first-child::-webkit-slider-runnable-track {
+            background: transparent;
+        }
+
+        .range-slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            pointer-events: auto;
+            margin-top: -7px;
+            border: 2px solid white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+
+        .range-slider-container input[type="range"]::-moz-range-track {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            border: none;
+        }
+
+        .range-slider-container input[type="range"]:first-child::-moz-range-track {
+            background: transparent;
+        }
+
+        .range-slider-container input[type="range"]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            pointer-events: auto;
+            border: 2px solid white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+
+        .range-slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #999;
+        }
+
+        .row-range-reset {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 5px 10px;
+            font-size: 11px;
+            background: #e0e0e0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+        .row-range-reset:hover {
+            background: #d0d0d0;
+        }
     </style>
 </head>
 <body>
@@ -577,6 +727,26 @@
 
             <div class="main-content">
                 <div class="cluster-panel" id="clusterPanel">
+                    <div class="row-range-section" id="rowRangeSection">
+                        <div class="row-range-header" id="rowRangeHeader">
+                            <h4>📏 Row Range</h4>
+                            <span class="row-range-toggle" id="rowRangeToggle">▼</span>
+                        </div>
+                        <div class="row-range-body" id="rowRangeBody">
+                            <div class="row-range-info" id="rowRangeInfo">
+                                Dataset: <strong>0 rows</strong> | Analyzing: <strong>rows 1-0</strong>
+                            </div>
+                            <div class="range-slider-container">
+                                <input type="range" id="rowRangeMin" min="1" max="1" value="1">
+                                <input type="range" id="rowRangeMax" min="1" max="1" value="1">
+                            </div>
+                            <div class="range-slider-labels">
+                                <span id="rowRangeMinLabel">1</span>
+                                <span id="rowRangeMaxLabel">1</span>
+                            </div>
+                            <button class="row-range-reset" id="btnResetRange">Reset Range</button>
+                        </div>
+                    </div>
                     <h3>📊 Topic Clusters</h3>
                     <div id="clusterList"></div>
                 </div>
@@ -863,6 +1033,8 @@
         let selectedFilterColumns = [];
         let selectedFilterValues = {};
         let availableColumns = [];
+        let rowRangeMin = 1;
+        let rowRangeMax = 1;
         
         // Analysis settings
         let analysisSettings = {
@@ -1128,10 +1300,11 @@
                 return;
             }
 
-            // Use filtered data count if filters are active, otherwise raw data
-            let rowCount = currentRawData.length;
+            // Use row-ranged then filtered data count
+            const rangedData = currentRawData.slice(rowRangeMin - 1, rowRangeMax);
+            let rowCount = rangedData.length;
             if (Object.keys(selectedFilterValues).length > 0) {
-                rowCount = currentRawData.filter(row => {
+                rowCount = rangedData.filter(row => {
                     return Object.entries(selectedFilterValues).every(([col, values]) => {
                         return values.includes(row[col]);
                     });
@@ -1168,6 +1341,78 @@
         }
 
         document.getElementById('btnAutoTune').addEventListener('click', autoTuneSettings);
+
+        // Row Range controls
+        document.getElementById('rowRangeHeader').addEventListener('click', () => {
+            const body = document.getElementById('rowRangeBody');
+            const toggle = document.getElementById('rowRangeToggle');
+            body.classList.toggle('open');
+            toggle.classList.toggle('open');
+        });
+
+        document.getElementById('rowRangeMin').addEventListener('input', (e) => {
+            const minVal = parseInt(e.target.value);
+            const maxVal = parseInt(document.getElementById('rowRangeMax').value);
+            if (minVal > maxVal) {
+                e.target.value = maxVal;
+                rowRangeMin = maxVal;
+            } else {
+                rowRangeMin = minVal;
+            }
+            updateRowRangeDisplay();
+        });
+
+        document.getElementById('rowRangeMax').addEventListener('input', (e) => {
+            const maxVal = parseInt(e.target.value);
+            const minVal = parseInt(document.getElementById('rowRangeMin').value);
+            if (maxVal < minVal) {
+                e.target.value = minVal;
+                rowRangeMax = minVal;
+            } else {
+                rowRangeMax = maxVal;
+            }
+            updateRowRangeDisplay();
+        });
+
+        document.getElementById('rowRangeMin').addEventListener('change', () => processData());
+        document.getElementById('rowRangeMax').addEventListener('change', () => processData());
+
+        document.getElementById('btnResetRange').addEventListener('click', () => {
+            if (!currentRawData) return;
+            rowRangeMin = 1;
+            rowRangeMax = currentRawData.length;
+            document.getElementById('rowRangeMin').value = 1;
+            document.getElementById('rowRangeMax').value = currentRawData.length;
+            updateRowRangeDisplay();
+            processData();
+        });
+
+        function initRowRange(totalRows) {
+            rowRangeMin = 1;
+            rowRangeMax = totalRows;
+            const minSlider = document.getElementById('rowRangeMin');
+            const maxSlider = document.getElementById('rowRangeMax');
+            minSlider.min = 1;
+            minSlider.max = totalRows;
+            minSlider.value = 1;
+            maxSlider.min = 1;
+            maxSlider.max = totalRows;
+            maxSlider.value = totalRows;
+            updateRowRangeDisplay();
+            document.getElementById('rowRangeSection').style.display = 'block';
+        }
+
+        function updateRowRangeDisplay() {
+            if (!currentRawData) return;
+            // Get current filtered dataset size from slider max
+            const maxSlider = document.getElementById('rowRangeMax');
+            const total = parseInt(maxSlider.max);
+            const count = rowRangeMax - rowRangeMin + 1;
+            document.getElementById('rowRangeInfo').innerHTML =
+                `Dataset: <strong>${total} rows</strong> | Analyzing: <strong>rows ${rowRangeMin}\u2013${rowRangeMax}</strong> (${count})`;
+            document.getElementById('rowRangeMinLabel').textContent = rowRangeMin;
+            document.getElementById('rowRangeMaxLabel').textContent = rowRangeMax;
+        }
 
         function addStopWord() {
             const input = document.getElementById('newStopWord');
@@ -1254,6 +1499,7 @@
                     }
 
                     loading.style.display = 'none';
+                    initRowRange(currentRawData.length);
                     showColumnModal();
                 },
                 error: err => {
@@ -1482,18 +1728,30 @@
                     document.getElementById('activeFiltersInfo').style.display = 'none';
                 }
 
-                // Filter data based on selected filter values
+                // Filter data based on selected filter values FIRST
                 let filteredData = currentRawData;
-                
+
                 if (Object.keys(selectedFilterValues).length > 0) {
                     filteredData = currentRawData.filter(row => {
                         return Object.entries(selectedFilterValues).every(([col, values]) => {
                             return values.includes(row[col]);
                         });
                     });
+                    console.log(`Filtered from ${currentRawData.length} to ${filteredData.length} rows`);
+                    
+                    // Update row range for filtered dataset
+                    initRowRange(filteredData.length);
+                } else {
+                    // Reset to full dataset
+                    initRowRange(currentRawData.length);
                 }
 
-                console.log(`Filtered from ${currentRawData.length} to ${filteredData.length} rows`);
+                // THEN apply row range slice
+                const rangedData = filteredData.slice(rowRangeMin - 1, rowRangeMax);
+                console.log(`Row range: ${rowRangeMin}-${rowRangeMax} (${rangedData.length} of ${filteredData.length} rows)`);
+                
+                // Final dataset for analysis
+                filteredData = rangedData;
 
                 if (filteredData.length === 0) {
                     alert('No rows match the selected filters. Please adjust your filter selection.');
