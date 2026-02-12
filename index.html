@@ -693,6 +693,28 @@
                 </p>
                 <input type="file" id="fileInput" accept=".csv">
             </div>
+            <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                <p style="color: #666; margin-bottom: 10px; font-size: 14px;">Or try a sample dataset:</p>
+                <select id="sampleSelector" style="padding: 10px 15px; border: 2px solid #667eea; background: white; color: #333; border-radius: 8px; cursor: pointer; font-size: 14px; margin-right: 10px; min-width: 250px;">
+                    <option value="">Select sample dataset...</option>
+                    <option value="small">Small (100 tickets) - Quick demo</option>
+                    <option value="medium">Medium (500 tickets) - Realistic analysis</option>
+                    <option value="large">Large (2000 tickets) - Complex patterns</option>
+                </select>
+                <button id="loadSampleBtn" style="padding: 10px 25px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); transition: all 0.2s;">
+                    Load Sample
+                </button>
+                <style>
+                    #loadSampleBtn:hover:not(:disabled) {
+                        transform: translateY(-2px);
+                        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+                    }
+                    #loadSampleBtn:disabled {
+                        opacity: 0.6;
+                        cursor: not-allowed;
+                    }
+                </style>
+            </div>
         </div>
 
         <div class="viz-container" id="vizContainer">
@@ -1073,6 +1095,74 @@
 
         fileInput.addEventListener('change', e => {
             if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        // Sample data loading
+        const sampleSelector = document.getElementById('sampleSelector');
+        const loadSampleBtn = document.getElementById('loadSampleBtn');
+
+        loadSampleBtn.addEventListener('click', async () => {
+            const size = sampleSelector.value;
+            if (!size) {
+                alert('Please select a sample dataset size first');
+                return;
+            }
+
+            const filename = `sample-data-${size}.csv`;
+            loadSampleBtn.disabled = true;
+            loadSampleBtn.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(filename);
+                if (!response.ok) throw new Error(`Failed to load ${filename}`);
+                const csvText = await response.text();
+
+                // Parse CSV and treat as uploaded file
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        if (results.errors.length > 0) {
+                            alert('Error parsing sample CSV');
+                            console.error(results.errors);
+                            loadSampleBtn.disabled = false;
+                            loadSampleBtn.textContent = 'Load Sample';
+                            return;
+                        }
+                        
+                        currentRawData = results.data;
+                        availableColumns = Object.keys(results.data[0] || {});
+                        
+                        // Auto-select text columns for analysis
+                        selectedTextColumns = availableColumns.filter(col => 
+                            col.toLowerCase().includes('description') || 
+                            col.toLowerCase().includes('notes') ||
+                            col.toLowerCase().includes('summary')
+                        );
+                        
+                        // Auto-select filter column if "product" exists
+                        selectedFilterColumns = availableColumns.filter(col => 
+                            col.toLowerCase() === 'product' ||
+                            col.toLowerCase() === 'category'
+                        );
+                        
+                        selectedFilterValues = {};
+                        
+                        showColumnSelectionModal();
+                        loadSampleBtn.disabled = false;
+                        loadSampleBtn.textContent = 'Load Sample';
+                    },
+                    error: function(err) {
+                        alert('Error parsing sample CSV: ' + err.message);
+                        loadSampleBtn.disabled = false;
+                        loadSampleBtn.textContent = 'Load Sample';
+                    }
+                });
+            } catch (err) {
+                alert('Failed to load sample data: ' + err.message);
+                loadSampleBtn.disabled = false;
+                loadSampleBtn.textContent = 'Load Sample';
+            }
         });
 
         // View tabs
