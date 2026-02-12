@@ -1120,7 +1120,6 @@
                 // Parse CSV and treat as uploaded file
                 Papa.parse(csvText, {
                     header: true,
-                    skipEmptyLines: true,
                     complete: function(results) {
                         if (results.errors.length > 0) {
                             alert('Error parsing sample CSV');
@@ -1130,8 +1129,30 @@
                             return;
                         }
                         
-                        currentRawData = results.data;
-                        availableColumns = Object.keys(results.data[0] || {});
+                        // Filter out empty rows
+                        currentRawData = results.data.filter(row => {
+                            return Object.values(row).some(val => val && val.trim());
+                        });
+                        
+                        if (currentRawData.length === 0) {
+                            alert('No valid rows found in sample CSV');
+                            loadSampleBtn.disabled = false;
+                            loadSampleBtn.textContent = 'Load Sample';
+                            return;
+                        }
+                        
+                        // Get available columns (those with text data)
+                        const sampleRow = currentRawData[0];
+                        availableColumns = Object.keys(sampleRow).filter(key => {
+                            return currentRawData.some(row => row[key] && row[key].trim().length > 0);
+                        });
+                        
+                        if (availableColumns.length === 0) {
+                            alert('No text columns found in sample CSV');
+                            loadSampleBtn.disabled = false;
+                            loadSampleBtn.textContent = 'Load Sample';
+                            return;
+                        }
                         
                         // Auto-select text columns for analysis
                         selectedTextColumns = availableColumns.filter(col => 
@@ -1147,8 +1168,10 @@
                         );
                         
                         selectedFilterValues = {};
+                        rowRangeMin = 1;
+                        rowRangeMax = currentRawData.length;
                         
-                        showColumnSelectionModal();
+                        showColumnModal();
                         loadSampleBtn.disabled = false;
                         loadSampleBtn.textContent = 'Load Sample';
                     },
