@@ -594,6 +594,7 @@
                         <button class="btn" id="btnChangeColumns">Change Columns</button>
                         <button class="btn" id="btnStopWords">Stop Words</button>
                         <button class="btn" id="btnSettings">⚙️ Settings</button>
+                        <button class="btn" id="btnAutoTune" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">🎯 Auto-Tune Settings</button>
                     </div>
 
                     <div id="networkContainer">
@@ -689,10 +690,44 @@
                 <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
                     Cluster Sensitivity: <span id="resolutionValue">1.2</span>
                 </label>
-                <input type="range" id="resolutionSlider" min="0.5" max="2.0" step="0.1" value="1.2" 
+                <input type="range" id="resolutionSlider" min="0.5" max="5.0" step="0.1" value="1.2"
                     style="width: 100%; cursor: pointer;">
                 <p style="font-size: 12px; color: #666; margin-top: 5px;">
                     Higher = More smaller clusters | Lower = Fewer larger clusters
+                </p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                    Minimum Edge Weight: <span id="minEdgeWeightValue">3</span>
+                </label>
+                <input type="range" id="minEdgeWeight" min="1" max="50" value="3"
+                    style="width: 100%; cursor: pointer;">
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Higher = Removes weak connections, prevents hairball graphs | Lower = Shows more connections
+                </p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                    Edge Filtering Mode:
+                </label>
+                <select id="edgeFilterMode" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 4px; font-size: 14px;">
+                    <option value="relative" selected>Relative (% of strongest connection)</option>
+                    <option value="absolute">Absolute (minimum weight)</option>
+                </select>
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Relative removes weak edges per node. Absolute uses fixed threshold.
+                </p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="useNGrams" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                    <span style="font-weight: 600; font-size: 14px; color: #333;">Use multi-word phrases (bigrams/trigrams)</span>
+                </label>
+                <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Better for structured data (tickets, forms). May not work well for freehand notes.
                 </p>
             </div>
 
@@ -833,7 +868,10 @@
         let analysisSettings = {
             topWords: 50,
             minCoOccurrence: 3,
-            resolution: 1.2
+            resolution: 1.2,
+            minEdgeWeight: 3,
+            edgeFilterMode: "relative",
+            useNGrams: false
         };
 
         // File drop handling
@@ -1013,11 +1051,18 @@
             settingsModal.classList.remove('active');
         });
 
+        document.getElementById('minEdgeWeight').addEventListener('input', (e) => {
+            document.getElementById('minEdgeWeightValue').textContent = e.target.value;
+        });
+
         document.getElementById('btnApplySettings').addEventListener('click', () => {
             analysisSettings.topWords = parseInt(document.getElementById('topWordsSlider').value);
             analysisSettings.minCoOccurrence = parseInt(document.getElementById('minCoOccurSlider').value);
             analysisSettings.resolution = parseFloat(document.getElementById('resolutionSlider').value);
-            
+            analysisSettings.minEdgeWeight = parseInt(document.getElementById('minEdgeWeight').value);
+            analysisSettings.edgeFilterMode = document.getElementById('edgeFilterMode').value;
+            analysisSettings.useNGrams = document.getElementById('useNGrams').checked;
+
             console.log('Settings updated:', analysisSettings);
             
             settingsModal.classList.remove('active');
@@ -1034,7 +1079,10 @@
             analysisSettings = {
                 topWords: 50,
                 minCoOccurrence: 3,
-                resolution: 1.2
+                resolution: 1.2,
+                minEdgeWeight: 3,
+                edgeFilterMode: "relative",
+                useNGrams: false
             };
             updateSettingsUI();
         });
@@ -1060,13 +1108,66 @@
         function updateSettingsUI() {
             document.getElementById('topWordsSlider').value = analysisSettings.topWords;
             document.getElementById('topWordsValue').textContent = analysisSettings.topWords;
-            
+
             document.getElementById('minCoOccurSlider').value = analysisSettings.minCoOccurrence;
             document.getElementById('minCoOccurValue').textContent = analysisSettings.minCoOccurrence;
-            
+
             document.getElementById('resolutionSlider').value = analysisSettings.resolution;
             document.getElementById('resolutionValue').textContent = analysisSettings.resolution.toFixed(1);
+
+            document.getElementById('minEdgeWeight').value = analysisSettings.minEdgeWeight;
+            document.getElementById('minEdgeWeightValue').textContent = analysisSettings.minEdgeWeight;
+
+            document.getElementById('edgeFilterMode').value = analysisSettings.edgeFilterMode;
+            document.getElementById('useNGrams').checked = analysisSettings.useNGrams;
         }
+
+        function autoTuneSettings() {
+            if (!currentRawData) {
+                alert('Please load a CSV file first.');
+                return;
+            }
+
+            // Use filtered data count if filters are active, otherwise raw data
+            let rowCount = currentRawData.length;
+            if (Object.keys(selectedFilterValues).length > 0) {
+                rowCount = currentRawData.filter(row => {
+                    return Object.entries(selectedFilterValues).every(([col, values]) => {
+                        return values.includes(row[col]);
+                    });
+                }).length;
+            }
+
+            let preset;
+
+            if (rowCount < 100) {
+                preset = { topWords: 30, minCoOccurrence: 2, resolution: 1.0, minEdgeWeight: 2 };
+            } else if (rowCount < 500) {
+                preset = { topWords: 50, minCoOccurrence: 3, resolution: 1.2, minEdgeWeight: 3 };
+            } else if (rowCount < 2000) {
+                preset = { topWords: 75, minCoOccurrence: 5, resolution: 1.5, minEdgeWeight: 5 };
+            } else {
+                preset = { topWords: 100, minCoOccurrence: 8, resolution: 2.0, minEdgeWeight: 8 };
+            }
+
+            const sizeLabel = rowCount < 100 ? "small" : rowCount < 500 ? "medium" : rowCount < 2000 ? "large" : "very large";
+            const message = `Detected ${rowCount} documents.\n\nRecommended settings for ${sizeLabel} dataset:\n` +
+                `\u2022 Top Keywords: ${preset.topWords}\n` +
+                `\u2022 Min Co-occurrence: ${preset.minCoOccurrence}\n` +
+                `\u2022 Cluster Sensitivity: ${preset.resolution}\n` +
+                `\u2022 Min Edge Weight: ${preset.minEdgeWeight}\n\n` +
+                `Apply these settings?`;
+
+            if (confirm(message)) {
+                analysisSettings = { ...analysisSettings, ...preset };
+                updateSettingsUI();
+                if (selectedTextColumns.length > 0) {
+                    processData();
+                }
+            }
+        }
+
+        document.getElementById('btnAutoTune').addEventListener('click', autoTuneSettings);
 
         function addStopWord() {
             const input = document.getElementById('newStopWord');
@@ -1333,6 +1434,33 @@
             });
         };
 
+        function extractKeywords(text) {
+            const cleaned = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+            const words = cleaned.split(/\s+/).filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+
+            const result = [...words];
+
+            if (analysisSettings.useNGrams) {
+                // Extract bigrams (2-word phrases)
+                for (let i = 0; i < words.length - 1; i++) {
+                    const bigram = words[i] + " " + words[i+1];
+                    if (bigram.length > 6) {
+                        result.push(bigram);
+                    }
+                }
+
+                // Extract trigrams (3-word phrases)
+                for (let i = 0; i < words.length - 2; i++) {
+                    const trigram = words[i] + " " + words[i+1] + " " + words[i+2];
+                    if (trigram.length > 10) {
+                        result.push(trigram);
+                    }
+                }
+            }
+
+            return result;
+        }
+
         function processData() {
             try {
                 console.log('Processing data - Text columns:', selectedTextColumns, 'Filter columns:', selectedFilterColumns);
@@ -1390,13 +1518,8 @@
                         .map(col => row[col] || '')
                         .filter(text => text.trim());
 
-                    const text = textParts.join(' ').toLowerCase();
-
-                    const words = text
-                        .replace(/[^\w\s]/g, ' ')
-                        .split(/\s+/)
-                        .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
-
+                    const text = textParts.join(' ');
+                    const words = extractKeywords(text);
                     const uniqueWords = [...new Set(words)];
 
                     uniqueWords.forEach(word => {
@@ -1411,10 +1534,19 @@
                     }
                 });
 
-                // Filter to top N words based on settings (use adjusted for small datasets)
-                const topWords = Array.from(wordFreq.entries())
+                // Calculate TF-IDF scores
+                const docCount = filteredData.length;
+                const tfidfScores = new Map();
+                wordFreq.forEach((count, word) => {
+                    const idf = Math.log(docCount / (count || 1));
+                    tfidfScores.set(word, count * idf);
+                });
+
+                // Filter to top N words by TF-IDF (capped at 200 for large datasets)
+                const topN = Math.min(adjustedSettings.topWords, 200);
+                const topWords = Array.from(tfidfScores.entries())
                     .sort((a, b) => b[1] - a[1])
-                    .slice(0, adjustedSettings.topWords)
+                    .slice(0, topN)
                     .map(([word]) => word);
 
                 console.log(`Extracted ${wordFreq.size} unique words, using top ${topWords.length}`);
@@ -1515,6 +1647,44 @@
                 });
 
                 console.log(`Graph created: ${graph.order} nodes, ${graph.size} edges`);
+
+                // Remove weak edges before clustering
+                const minEdgeWeight = analysisSettings.minEdgeWeight;
+                const edgeFilterMode = analysisSettings.edgeFilterMode;
+                const edgesToDrop = [];
+
+                if (edgeFilterMode === "relative") {
+                    // Relative filtering: remove edges < X% of each node's max edge
+                    const minRelativeStrength = minEdgeWeight / 50; // Convert 1-50 slider to 0.02-1.0
+
+                    graph.forEachNode(node => {
+                        const nodeEdges = graph.edges(node);
+                        if (nodeEdges.length === 0) return;
+
+                        const maxWeight = Math.max(...nodeEdges.map(e => graph.getEdgeAttribute(e, "weight")));
+                        const threshold = maxWeight * minRelativeStrength;
+
+                        nodeEdges.forEach(edge => {
+                            if (graph.getEdgeAttribute(edge, "weight") < threshold) {
+                                if (!edgesToDrop.includes(edge)) {
+                                    edgesToDrop.push(edge);
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    // Absolute filtering (existing logic)
+                    graph.forEachEdge((edge, attrs) => {
+                        if (attrs.weight < minEdgeWeight) {
+                            edgesToDrop.push(edge);
+                        }
+                    });
+                }
+
+                edgesToDrop.forEach(edge => {
+                    try { graph.dropEdge(edge); } catch(e) {}
+                });
+                console.log(`Removed ${edgesToDrop.length} weak edges (mode: ${edgeFilterMode}, weight: ${minEdgeWeight}), ${graph.size} edges remaining`);
 
                 // Use user's resolution setting directly
                 const communities = louvain(graph, {
