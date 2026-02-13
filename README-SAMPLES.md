@@ -1,6 +1,6 @@
 # Sample Datasets
 
-Three ready-to-use sample datasets are included for testing the Topic Network Explorer.
+Three ready-to-use sample datasets are included for testing Connection Canvas.
 
 ## Dataset Overview
 
@@ -136,5 +136,5 @@ Free to use, modify, and distribute.
 ---
 
 **Generated:** February 12, 2026  
-**Tool:** Topic Network Explorer  
+**Tool:** Connection Canvas  
 **Version:** 1.0

@@ -1,4 +1,4 @@
-# Topic Network Explorer
+# Connection Canvas
 
 **Standalone web application for visualizing keyword co-occurrence and topic clustering in any text data.**
 
@@ -18,7 +18,7 @@
 
 ### Option 1: Simple Python Server
 ```bash
-cd ~/Projects/ticket-network-analyzer
+cd ~/Projects/connection-canvas
 python3 -m http.server 8080
 ```
 
@@ -26,7 +26,7 @@ Then open: http://localhost:8080
 
 ### Option 2: Node.js Server
 ```bash
-cd ~/Projects/ticket-network-analyzer
+cd ~/Projects/connection-canvas
 npx http-server -p 8080
 ```
 
